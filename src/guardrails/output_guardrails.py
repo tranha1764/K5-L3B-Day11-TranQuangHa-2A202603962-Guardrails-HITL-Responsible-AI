@@ -41,12 +41,16 @@ def content_filter(response: str) -> dict:
 
     # PII patterns to check
     PII_PATTERNS = {
-        # TODO: Add regex patterns for:
-        # - VN phone number: r"0\d{9,10}"
-        # - Email: r"[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}"
-        # - National ID (CMND/CCCD): r"\b\d{9}\b|\b\d{12}\b"
-        # - API key pattern: r"sk-[a-zA-Z0-9-]+"
-        # - Password pattern: r"password\s*[:=]\s*\S+"
+        # SDT Viet Nam: bat dau bang 0, tiep theo 9-10 chu so
+        "phone_vn":  r"0\d{9,10}",
+        # Email
+        "email":     r"[\w.\-+]+@[\w.\-]+\.[a-zA-Z]{2,}",
+        # CMND (9 so) hoac CCCD (12 so)
+        "cccd":      r"\b\d{9}\b|\b\d{12}\b",
+        # API key dang sk-...
+        "api_key":   r"sk-[a-zA-Z0-9\-]+",
+        # Password dang 'password: xxx' hoac 'password = xxx'
+        "password":  r"password\s*[:=]\s*\S+",
     }
 
     for name, pattern in PII_PATTERNS.items():
@@ -181,7 +185,19 @@ class OutputGuardrailPlugin(base_plugin.BasePlugin):
         #    - Increment self.blocked_count
         # 3. Return llm_response (possibly modified)
 
-        return llm_response  # TODO: modify if needed
+        # Chay content_filter de kiem tra PII / secret trong response
+        result = content_filter(response_text)
+
+        if not result["safe"]:
+            # Co van de -> thay content bang ban da redact
+            self.redacted_count += 1
+            from google.genai import types as _types
+            llm_response.content = _types.Content(
+                role="model",
+                parts=[_types.Part.from_text(text=result["redacted"])],
+            )
+
+        return llm_response
 
 
 # ============================================================
